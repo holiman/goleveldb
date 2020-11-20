@@ -7,6 +7,7 @@
 package leveldb
 
 import (
+	"fmt"
 	"sort"
 	"sync/atomic"
 
@@ -316,10 +317,12 @@ func (c *compaction) newIterator() iterator.Iterator {
 
 		// Level-0 is not sorted and may overlaps each other.
 		if c.sourceLevel+i == 0 {
+			fmt.Printf("leveldb: adding %d iterators at level %d\n", len(tables), c.sourceLevel)
 			for _, t := range tables {
 				its = append(its, c.s.tops.newIterator(t, nil, ro))
 			}
 		} else {
+			fmt.Printf("leveldb: adding 1 iterator at level %d\n", len(tables), c.sourceLevel)
 			it := iterator.NewIndexedIterator(tables.newIndexIterator(c.s.tops, c.s.icmp, nil, ro), strict)
 			its = append(its, it)
 		}
