@@ -71,7 +71,7 @@ func (i *mergedIterator) First() bool {
 		fmt.Printf("leveldb: mergedIterator consists of %d indexed iterators\n", len(i.iters))
 		return false
 	}
-	panic(fmt.Sprintf("X: %d", len(i.iters))
+	panic(fmt.Sprintf("X: %d", len(i.iters)))
 	for x, iter := range i.iters {
 		switch {
 		case iter.First():
