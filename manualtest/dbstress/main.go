@@ -21,6 +21,7 @@ import (
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/errors"
+	"github.com/syndtr/goleveldb/leveldb/filter"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/storage"
 	"github.com/syndtr/goleveldb/leveldb/table"
@@ -165,7 +166,7 @@ func (ts *testingStorage) scanTable(fd storage.FileDesc, checksum bool) (corrupt
 
 	o := &opt.Options{
 		DisableLargeBatchTransaction: true,
-		Strict: opt.NoStrict,
+		Strict:                       opt.NoStrict,
 	}
 	if checksum {
 		o.Strict = opt.StrictBlockChecksum | opt.StrictReader
@@ -350,6 +351,7 @@ func main() {
 		DisableBlockCache:      !enableBlockCache,
 		ErrorIfExist:           true,
 		Compression:            opt.NoCompression,
+		Filter:                 filter.NewBloomFilter(10),
 	}
 	if enableCompression {
 		o.Compression = opt.DefaultCompression
@@ -426,8 +428,10 @@ func main() {
 			aliveiters, _ := db.GetProperty("leveldb.aliveiters")
 			blockpool, _ := db.GetProperty("leveldb.blockpool")
 			writeDelay, _ := db.GetProperty("leveldb.writedelay")
-			log.Printf("> BlockCache=%s OpenedTables=%s AliveSnaps=%s AliveIter=%s BlockPool=%q WriteDelay=%q",
-				cachedblock, openedtables, alivesnaps, aliveiters, blockpool, writeDelay)
+			ioStats, _ := db.GetProperty("leveldb.iostats")
+			compCount, _ := db.GetProperty("leveldb.compcount")
+			log.Printf("> BlockCache=%s OpenedTables=%s AliveSnaps=%s AliveIter=%s BlockPool=%q WriteDelay=%q IOStats=%q CompCount=%q",
+				cachedblock, openedtables, alivesnaps, aliveiters, blockpool, writeDelay, ioStats, compCount)
 			log.Print("------------------------")
 		}
 	}()
@@ -525,7 +529,7 @@ func main() {
 								getStat.record(1)
 
 								if checksum0, checksum1 := dataChecksum(v2); checksum0 != checksum1 {
-									err := &errors.ErrCorrupted{Fd: storage.FileDesc{0xff, 0}, Err: fmt.Errorf("v2: %x: checksum mismatch: %v vs %v", v2, checksum0, checksum1)}
+									err := &errors.ErrCorrupted{Fd: storage.FileDesc{Type: 0xff, Num: 0}, Err: fmt.Errorf("v2: %x: checksum mismatch: %v vs %v", v2, checksum0, checksum1)}
 									fatalf(err, "[%02d] READER #%d.%d K%d snap.Get: %v\nk1: %x\n -> k2: %x", ns, snapwi, ri, n, err, k1, k2)
 								}
 

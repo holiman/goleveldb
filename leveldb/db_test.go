@@ -431,7 +431,7 @@ func (h *dbHarness) compactRange(min, max string) {
 
 func (h *dbHarness) sizeOf(start, limit string) int64 {
 	sz, err := h.db.SizeOf([]util.Range{
-		{[]byte(start), []byte(limit)},
+		{Start: []byte(start), Limit: []byte(limit)},
 	})
 	if err != nil {
 		h.t.Error("SizeOf: got error: ", err)
@@ -515,7 +515,7 @@ func truno(t *testing.T, o *opt.Options, f func(h *dbHarness)) {
 				if o == nil {
 					o = &opt.Options{
 						DisableLargeBatchTransaction: true,
-						Filter: testingBloomFilter,
+						Filter:                       testingBloomFilter,
 					}
 				} else {
 					old := o
@@ -1592,7 +1592,7 @@ func TestDB_ClosedIsClosed(t *testing.T) {
 	_, err = db.GetProperty("leveldb.stats")
 	assertErr(t, err, true)
 
-	_, err = db.SizeOf([]util.Range{{[]byte("a"), []byte("z")}})
+	_, err = db.SizeOf([]util.Range{{Start: []byte("a"), Limit: []byte("z")}})
 	assertErr(t, err, true)
 
 	assertErr(t, db.CompactRange(util.Range{}), true)
@@ -2558,14 +2558,14 @@ func TestDB_TableCompactionBuilder(t *testing.T) {
 		}
 		rec := &sessionRecord{}
 		rec.addTableFile(i, tf)
-		if err := s.commit(rec); err != nil {
+		if err := s.commit(rec, false); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Build grandparent.
 	v := s.version()
-	c := newCompaction(s, v, 1, append(tFiles{}, v.levels[1]...))
+	c := newCompaction(s, v, 1, append(tFiles{}, v.levels[1]...), undefinedCompaction)
 	rec := &sessionRecord{}
 	b := &tableCompactionBuilder{
 		s:         s,
@@ -2582,14 +2582,14 @@ func TestDB_TableCompactionBuilder(t *testing.T) {
 	for _, t := range c.levels[0] {
 		rec.delTable(c.sourceLevel, t.fd.Num)
 	}
-	if err := s.commit(rec); err != nil {
+	if err := s.commit(rec, false); err != nil {
 		t.Fatal(err)
 	}
 	c.release()
 
 	// Build level-1.
 	v = s.version()
-	c = newCompaction(s, v, 0, append(tFiles{}, v.levels[0]...))
+	c = newCompaction(s, v, 0, append(tFiles{}, v.levels[0]...), undefinedCompaction)
 	rec = &sessionRecord{}
 	b = &tableCompactionBuilder{
 		s:         s,
@@ -2611,7 +2611,7 @@ func TestDB_TableCompactionBuilder(t *testing.T) {
 		rec.delTable(2, t.fd.Num)
 		rec.addTableFile(3, t)
 	}
-	if err := s.commit(rec); err != nil {
+	if err := s.commit(rec, false); err != nil {
 		t.Fatal(err)
 	}
 	c.release()
@@ -2633,7 +2633,7 @@ func TestDB_TableCompactionBuilder(t *testing.T) {
 
 	// Compaction with transient error.
 	v = s.version()
-	c = newCompaction(s, v, 1, append(tFiles{}, v.levels[1]...))
+	c = newCompaction(s, v, 1, append(tFiles{}, v.levels[1]...), undefinedCompaction)
 	rec = &sessionRecord{}
 	b = &tableCompactionBuilder{
 		s:         s,
@@ -2653,7 +2653,7 @@ func TestDB_TableCompactionBuilder(t *testing.T) {
 			break
 		}
 	}
-	if err := s.commit(rec); err != nil {
+	if err := s.commit(rec, false); err != nil {
 		t.Fatal(err)
 	}
 	c.release()
