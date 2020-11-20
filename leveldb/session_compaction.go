@@ -144,9 +144,9 @@ func newCompaction(s *session, v *version, sourceLevel int, t0 tFiles, typ int) 
 		maxGPOverlaps: int64(s.o.GetCompactionGPOverlaps(sourceLevel)),
 		tPtrs:         make([]int, len(v.levels)),
 	}
-	fmt.Printf("newCompaction. t0 has %d elems\n", len(t0))
+	fmt.Printf("leveldb: newCompaction. t0=%d, t1=%d  elems\n", len(c.levels[0]), len(c.levels[1]))
 	c.expand()
-	fmt.Printf("newCompaction, after c.expand t0 has %d elems\n", len(t0))
+	fmt.Printf("leveldb: newCompaction: after expand, t0=%d, t1=%d  elems\n", len(c.levels[0]), len(c.levels[1]))
 	c.save()
 	return c
 }
