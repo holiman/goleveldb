@@ -149,6 +149,29 @@ type blockIter struct {
 	offsetLimit     int
 	// Error.
 	err error
+
+	blockNotLoaded bool
+}
+
+func (i *blockIter) getBlock() *block {
+	if i.block != nil {
+		return i.block
+	}
+	if i.blockNotLoaded {
+		// load block now
+		indexBlock, _, _ := i.tr.getIndexBlock(false)
+		// if these have not yet been set, set them now (only once)
+		if i.riLimit == -1 {
+			i.riLimit = indexBlock.restartsLen
+			i.offsetLimit = indexBlock.restartsOffset
+		}
+		// This probably won't scale well, and we might need to use an LRU
+		// to not open/close files all the time. OTOH, the OS might
+		// cache these blocks for us, so reading the same blockheader
+		// many times might be pretty fast. TODO for later
+		return indexBlock
+	}
+	return i.block
 }
 
 func (i *blockIter) sErr(err error) {
@@ -228,8 +251,8 @@ func (i *blockIter) Seek(key []byte) bool {
 		i.err = ErrIterReleased
 		return false
 	}
-
-	ri, offset, err := i.block.seek(i.tr.cmp, i.riStart, i.riLimit, key)
+	var block = i.getBlock()
+	ri, offset, err := block.seek(i.tr.cmp, i.riStart, i.riLimit, key)
 	if err != nil {
 		i.sErr(err)
 		return false
@@ -254,6 +277,7 @@ func (i *blockIter) Next() bool {
 		i.err = ErrIterReleased
 		return false
 	}
+	var block = i.getBlock()
 
 	if i.dir == dirSOI {
 		i.restartIndex = i.riStart
@@ -263,9 +287,9 @@ func (i *blockIter) Next() bool {
 		i.prevKeys = i.prevKeys[:0]
 	}
 	for i.offset < i.offsetRealStart {
-		key, value, nShared, n, err := i.block.entry(i.offset)
+		key, value, nShared, n, err := block.entry(i.offset)
 		if err != nil {
-			i.sErr(i.tr.fixErrCorruptedBH(i.block.bh, err))
+			i.sErr(i.tr.fixErrCorruptedBH(block.bh, err))
 			return false
 		}
 		if n == 0 {
@@ -279,13 +303,13 @@ func (i *blockIter) Next() bool {
 	if i.offset >= i.offsetLimit {
 		i.dir = dirEOI
 		if i.offset != i.offsetLimit {
-			i.sErr(i.tr.newErrCorruptedBH(i.block.bh, "entries offset not aligned"))
+			i.sErr(i.tr.newErrCorruptedBH(block.bh, "entries offset not aligned"))
 		}
 		return false
 	}
-	key, value, nShared, n, err := i.block.entry(i.offset)
+	key, value, nShared, n, err := block.entry(i.offset)
 	if err != nil {
-		i.sErr(i.tr.fixErrCorruptedBH(i.block.bh, err))
+		i.sErr(i.tr.fixErrCorruptedBH(block.bh, err))
 		return false
 	}
 	if n == 0 {
@@ -309,6 +333,7 @@ func (i *blockIter) Prev() bool {
 	}
 
 	var ri int
+	var block = i.getBlock()
 	if i.dir == dirForward {
 		// Change direction.
 		i.offset = i.prevOffset
@@ -316,7 +341,7 @@ func (i *blockIter) Prev() bool {
 			i.dir = dirSOI
 			return false
 		}
-		ri = i.block.restartIndex(i.restartIndex, i.riLimit, i.offset)
+		ri = block.restartIndex(i.restartIndex, i.riLimit, i.offset)
 		i.dir = dirBackward
 	} else if i.dir == dirEOI {
 		// At the end of iterator.
@@ -350,27 +375,27 @@ func (i *blockIter) Prev() bool {
 		// Get the value.
 		vo := node[1]
 		vl := vo + node[2]
-		i.value = i.block.data[vo:vl]
+		i.value = block.data[vo:vl]
 		i.offset = vl
 		return true
 	}
 	// Build entries cache.
 	i.key = i.key[:0]
 	i.value = nil
-	offset := i.block.restartOffset(ri)
+	offset := block.restartOffset(ri)
 	if offset == i.offset {
 		ri--
 		if ri < 0 {
 			i.dir = dirSOI
 			return false
 		}
-		offset = i.block.restartOffset(ri)
+		offset = block.restartOffset(ri)
 	}
 	i.prevNode = append(i.prevNode, offset)
 	for {
-		key, value, nShared, n, err := i.block.entry(offset)
+		key, value, nShared, n, err := block.entry(offset)
 		if err != nil {
-			i.sErr(i.tr.fixErrCorruptedBH(i.block.bh, err))
+			i.sErr(i.tr.fixErrCorruptedBH(block.bh, err))
 			return false
 		}
 		if offset >= i.offsetRealStart {
@@ -389,7 +414,7 @@ func (i *blockIter) Prev() bool {
 		// Stop if target offset reached.
 		if offset >= i.offset {
 			if offset != i.offset {
-				i.sErr(i.tr.newErrCorruptedBH(i.block.bh, "entries offset not aligned"))
+				i.sErr(i.tr.newErrCorruptedBH(block.bh, "entries offset not aligned"))
 				return false
 			}
 
@@ -720,6 +745,21 @@ func (r *Reader) getFilterBlock(fillCache bool) (*filterBlock, util.Releaser, er
 	}
 	return r.filterBlock, util.NoopReleaser{}, nil
 }
+func (r *Reader) newLazyBlockIter(inclLimit bool) *blockIter {
+	bi := &blockIter{
+		tr: r,
+		// Valid key should never be nil.
+		key:             make([]byte, 0),
+		dir:             dirSOI,
+		riStart:         0,
+		riLimit:         -1, // Needs to be initalized when block is loaded
+		offsetStart:     0,
+		offsetRealStart: 0,
+		offsetLimit:     -1, // Needs to be initialized when block is loaded
+		blockNotLoaded:  true,
+	}
+	return bi
+}
 
 func (r *Reader) newBlockIter(b *block, bReleaser util.Releaser, slice *util.Range, inclLimit bool) *blockIter {
 	bi := &blockIter{
@@ -795,6 +835,25 @@ func (r *Reader) getDataIterErr(dataBH blockHandle, slice *util.Range, verifyChe
 // after use.
 //
 // Also read Iterator documentation of the leveldb/iterator package.
+func (r *Reader) NewLazyIterator(ro *opt.ReadOptions) iterator.Iterator {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if r.err != nil {
+		return iterator.NewEmptyIterator(r.err)
+	}
+
+	var blockIterator *blockIter
+	blockIterator = r.newLazyBlockIter(true)
+
+	index := &indexIter{
+		blockIter: blockIterator,
+		tr:        r,
+		fillCache: !ro.GetDontFillCache(),
+	}
+	return iterator.NewIndexedIterator(index, opt.GetStrict(r.o, ro, opt.StrictReader))
+}
+
 func (r *Reader) NewIterator(slice *util.Range, ro *opt.ReadOptions) iterator.Iterator {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

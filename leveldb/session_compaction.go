@@ -7,6 +7,7 @@
 package leveldb
 
 import (
+	"fmt"
 	"sort"
 	"sync/atomic"
 
@@ -196,6 +197,7 @@ func (c *compaction) release() {
 // Expand compacted tables; need external synchronization.
 func (c *compaction) expand() {
 	limit := int64(c.s.o.GetCompactionExpandLimit(c.sourceLevel))
+	// leveldb.session_compactio.expand(): c.sourceLevel: 0 limit: 52428800
 	vt0 := c.v.levels[c.sourceLevel]
 	vt1 := tFiles{}
 	if level := c.sourceLevel + 1; level < len(c.v.levels) {
@@ -203,6 +205,7 @@ func (c *compaction) expand() {
 	}
 
 	t0, t1 := c.levels[0], c.levels[1]
+	//leveldb.session_compaction.expand():t0: 1, t1:0
 	imin, imax := t0.getRange(c.s.icmp)
 
 	// For non-zero levels, the ukey can't hop across tables at all.
@@ -308,7 +311,6 @@ func (c *compaction) newIterator() iterator.Iterator {
 	if strict {
 		ro.Strict |= opt.StrictReader
 	}
-
 	for i, tables := range c.levels {
 		if len(tables) == 0 {
 			continue
@@ -316,8 +318,9 @@ func (c *compaction) newIterator() iterator.Iterator {
 
 		// Level-0 is not sorted and may overlaps each other.
 		if c.sourceLevel+i == 0 {
+			fmt.Printf("leveldb: adding %d lazy iterators at level %d\n", len(tables), c.sourceLevel)
 			for _, t := range tables {
-				its = append(its, c.s.tops.newIterator(t, nil, ro))
+				its = append(its, c.s.tops.newLazyIterator(t, ro))
 			}
 		} else {
 			it := iterator.NewIndexedIterator(tables.newIndexIterator(c.s.tops, c.s.icmp, nil, ro), strict)

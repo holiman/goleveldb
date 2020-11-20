@@ -253,20 +253,24 @@ func (tf tFiles) getOverlaps(dst tFiles, icmp *iComparer, umin, umax []byte, ove
 	dst = dst[:0]
 	for i := 0; i < len(tf); {
 		t := tf[i]
+		var reset bool
 		if t.overlaps(icmp, umin, umax) {
 			if umin != nil && icmp.uCompare(t.imin.ukey(), umin) < 0 {
 				umin = t.imin.ukey()
-				dst = dst[:0]
-				i = 0
-				continue
-			} else if umax != nil && icmp.uCompare(t.imax.ukey(), umax) > 0 {
+				fmt.Printf("leveldb.table.getOverlaps: expanding from %d, new min: %x\n", len(dst), umin)
+				reset = true
+			}
+			if umax != nil && icmp.uCompare(t.imax.ukey(), umax) > 0 {
 				umax = t.imax.ukey()
 				// Restart search if it is overlapped.
+				fmt.Printf("leveldb.table.getOverlaps: expanding from %d, new max: %x\n", len(dst), umax)
+				reset = true
+			}
+			if reset {
 				dst = dst[:0]
 				i = 0
 				continue
 			}
-
 			dst = append(dst, t)
 		}
 		i++
@@ -468,6 +472,17 @@ func (t *tOps) offsetOf(f *tFile, key []byte) (offset int64, err error) {
 	}
 	defer ch.Release()
 	return ch.Value().(*table.Reader).OffsetOf(key)
+}
+
+// Creates an iterator from the given table.
+func (t *tOps) newLazyIterator(f *tFile, ro *opt.ReadOptions) iterator.Iterator {
+	ch, err := t.open(f)
+	if err != nil {
+		return iterator.NewEmptyIterator(err)
+	}
+	iter := ch.Value().(*table.Reader).NewLazyIterator(ro)
+	iter.SetReleaser(ch)
+	return iter
 }
 
 // Creates an iterator from the given table.
