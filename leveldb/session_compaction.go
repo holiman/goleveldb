@@ -199,6 +199,7 @@ func (c *compaction) release() {
 // Expand compacted tables; need external synchronization.
 func (c *compaction) expand() {
 	limit := int64(c.s.o.GetCompactionExpandLimit(c.sourceLevel))
+	fmt.Printf("leveldb.session_compactio.expand(): c.sourceLevel: %d limit: %d\n", c.sourceLevel, limit)
 	vt0 := c.v.levels[c.sourceLevel]
 	vt1 := tFiles{}
 	if level := c.sourceLevel + 1; level < len(c.v.levels) {
@@ -206,6 +207,7 @@ func (c *compaction) expand() {
 	}
 
 	t0, t1 := c.levels[0], c.levels[1]
+	fmt.Printf("leveldb.session_compaction.expand():t0: %d, t1:%d\n", len(t0), len(t1))
 	imin, imax := t0.getRange(c.s.icmp)
 
 	// For non-zero levels, the ukey can't hop across tables at all.
@@ -215,8 +217,10 @@ func (c *compaction) expand() {
 		if len(t0) != len(c.levels[0]) {
 			imin, imax = t0.getRange(c.s.icmp)
 		}
+		fmt.Printf("leveldb.session_compaction.expand():[2] t0: %d, t1:%d\n", len(t0), len(t1))
 	}
 	t1 = vt1.getOverlaps(t1, c.s.icmp, imin.ukey(), imax.ukey(), false)
+	fmt.Printf("leveldb.session_compaction.expand():[3] t0: %d, t1:%d\n", len(t0), len(t1))
 	// Get entire range covered by compaction.
 	amin, amax := append(t0, t1...).getRange(c.s.icmp)
 
@@ -224,6 +228,8 @@ func (c *compaction) expand() {
 	// changing the number of "sourceLevel+1" files we pick up.
 	if len(t1) > 0 {
 		exp0 := vt0.getOverlaps(nil, c.s.icmp, amin.ukey(), amax.ukey(), c.sourceLevel == 0)
+		fmt.Printf("leveldb.session_compaction.expand():[2] exp0:%d, t1.size(): %d exp0.size():%d\n",
+			len(exp0), t1.size(), exp0.size())
 		if len(exp0) > len(t0) && t1.size()+exp0.size() < limit {
 			xmin, xmax := exp0.getRange(c.s.icmp)
 			exp1 := vt1.getOverlaps(nil, c.s.icmp, xmin.ukey(), xmax.ukey(), false)
@@ -233,7 +239,9 @@ func (c *compaction) expand() {
 					len(exp0), shortenb(int(exp0.size())), len(exp1), shortenb(int(exp1.size())))
 				imin, imax = xmin, xmax
 				t0, t1 = exp0, exp1
+				fmt.Printf("leveldb: doing that odd append. t0: %d, t1:%d\n", len(t0), len(t1))
 				amin, amax = append(t0, t1...).getRange(c.s.icmp)
+				fmt.Printf("leveldb: after doing that odd append. t0: %d, t1:%d\n", len(t0), len(t1))
 			}
 		}
 	}
