@@ -216,14 +216,17 @@ func (c *compaction) expand() {
 	if c.sourceLevel == 0 {
 		fmt.Printf("leveldb.session_compaction.expand.inner-1(): vt0 %d, imin: %x imax:%x\n",
 			len(vt0), imin.ukey(), imax.ukey())
+		// leveldb.session_compaction.expand.inner-1(): vt0 2923419, imin: 657468657265756d2d636f6e6669672dd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3 imax:657468657265756d2d636f6e6669672dd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3
 		// We expand t0 here just incase ukey hop across tables.
 		t0 = vt0.getOverlaps(t0, c.s.icmp, imin.ukey(), imax.ukey(), c.sourceLevel == 0)
 		fmt.Printf("leveldb.session_compaction.expandinner-2(): t0 %d, imin: %x imax:%x\n",
-			len(vt0), imin.ukey(), imax.ukey())
+			len(t0), imin.ukey(), imax.ukey())
+		// leveldb.session_compaction.expandinner-2(): t0 2923419, imin: 657468657265756d2d636f6e6669672dd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3 imax:657468657265756d2d636f6e6669672dd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3
 		if len(t0) != len(c.levels[0]) {
 			imin, imax = t0.getRange(c.s.icmp)
 			fmt.Printf("leveldb.session_compaction.expandinner-3(): t0 %d, imin: %x imax:%x\n",
-				len(vt0), imin.ukey(), imax.ukey())
+				len(t0), imin.ukey(), imax.ukey())
+// leveldb.session_compaction.expandinner-3(): t0 2923419, imin: 000000010cab21957a6be7e80de2b6f533dbb7c4e2d084a246c3233c0aa064d4 imax:ffffffff99fb75aa3f6f55b68f51cd010d52c99917f6bb9835a992e2211a0545
 		}
 		fmt.Printf("leveldb.session_compaction.expand():[2] t0: %d, t1:%d\n", len(t0), len(t1))
 		// leveldb.session_compaction.expand():[2] t0: 2923418, t1:0

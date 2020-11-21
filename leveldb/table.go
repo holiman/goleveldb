@@ -256,12 +256,14 @@ func (tf tFiles) getOverlaps(dst tFiles, icmp *iComparer, umin, umax []byte, ove
 		if t.overlaps(icmp, umin, umax) {
 			if umin != nil && icmp.uCompare(t.imin.ukey(), umin) < 0 {
 				umin = t.imin.ukey()
+				fmt.Printf("leveldb.table.getOverlaps: expanding from %d, new min: %x\n", len(dst), umin)
 				dst = dst[:0]
 				i = 0
 				continue
 			} else if umax != nil && icmp.uCompare(t.imax.ukey(), umax) > 0 {
 				umax = t.imax.ukey()
 				// Restart search if it is overlapped.
+				fmt.Printf("leveldb.table.getOverlaps: expanding from %d, new max: %x\n", len(dst), umax)
 				dst = dst[:0]
 				i = 0
 				continue
