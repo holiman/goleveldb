@@ -200,6 +200,7 @@ func (c *compaction) release() {
 func (c *compaction) expand() {
 	limit := int64(c.s.o.GetCompactionExpandLimit(c.sourceLevel))
 	fmt.Printf("leveldb.session_compactio.expand(): c.sourceLevel: %d limit: %d\n", c.sourceLevel, limit)
+	// leveldb.session_compactio.expand(): c.sourceLevel: 0 limit: 52428800
 	vt0 := c.v.levels[c.sourceLevel]
 	vt1 := tFiles{}
 	if level := c.sourceLevel + 1; level < len(c.v.levels) {
@@ -208,19 +209,28 @@ func (c *compaction) expand() {
 
 	t0, t1 := c.levels[0], c.levels[1]
 	fmt.Printf("leveldb.session_compaction.expand():t0: %d, t1:%d\n", len(t0), len(t1))
+	//leveldb.session_compaction.expand():t0: 1, t1:0
 	imin, imax := t0.getRange(c.s.icmp)
 
 	// For non-zero levels, the ukey can't hop across tables at all.
 	if c.sourceLevel == 0 {
+		fmt.Printf("leveldb.session_compaction.expand.inner-1(): vt0 %d, imin: %x imax:%x\n",
+			len(vt0), imin.ukey(), imax.ukey())
 		// We expand t0 here just incase ukey hop across tables.
 		t0 = vt0.getOverlaps(t0, c.s.icmp, imin.ukey(), imax.ukey(), c.sourceLevel == 0)
+		fmt.Printf("leveldb.session_compaction.expandinner-2(): t0 %d, imin: %x imax:%x\n",
+			len(vt0), imin.ukey(), imax.ukey())
 		if len(t0) != len(c.levels[0]) {
 			imin, imax = t0.getRange(c.s.icmp)
+			fmt.Printf("leveldb.session_compaction.expandinner-3(): t0 %d, imin: %x imax:%x\n",
+				len(vt0), imin.ukey(), imax.ukey())
 		}
 		fmt.Printf("leveldb.session_compaction.expand():[2] t0: %d, t1:%d\n", len(t0), len(t1))
+		// leveldb.session_compaction.expand():[2] t0: 2923418, t1:0
 	}
 	t1 = vt1.getOverlaps(t1, c.s.icmp, imin.ukey(), imax.ukey(), false)
 	fmt.Printf("leveldb.session_compaction.expand():[3] t0: %d, t1:%d\n", len(t0), len(t1))
+	//leveldb.session_compaction.expand():[3] t0: 2923418, t1:0
 	// Get entire range covered by compaction.
 	amin, amax := append(t0, t1...).getRange(c.s.icmp)
 
